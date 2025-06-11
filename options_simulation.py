@@ -1,4 +1,4 @@
-# ▒▒▒  Covered–call vs naked–call vs long–stock payoff chart  ▒▒▒
+# ▒▒▒ Covered–call vs naked–call vs long–stock payoff chart ▒▒▒
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,61 +8,96 @@ from matplotlib.ticker import FuncFormatter
 strike_price = 420  # $ / share
 premium = 10  # $ / share received
 basis = 420  # cost basis of the stock
-
 contract_size = 100  # shares per standard option
 per_share = True  # True → $/share, False → $/contract
-show_profit = True  # True → P/L,   False → mark-to-market value
+show_profit = True  # True → P/L, False → mark-to-market value
 
-# ─────────── 2. ABSOLUTE STOCK-PRICE GRID ───────────
+# ─────────── 2. STRATEGY SELECTION ───────────
+# Choose which strategies to plot by including them in this list
+strategies_to_plot = [
+    "Long Stock",
+    # "Naked Short Call",
+    "Covered Call",
+    # "Naked Short Put",
+    # "Cash Secured Put",
+    # Modify this list to select strategies,
+    # e.g., ["Long Stock", "Covered Call"]
+]
+
+# ─────────── 3. ABSOLUTE STOCK-PRICE GRID ───────────
 stock_prices = np.arange(
     strike_price * 0.75,  # 315 …
     strike_price * 1.25 + 0.01,
     1.0,
 )  # … 525
 
-print(f"Stock price grid: {stock_prices}")
-# ─────────── 3. PAY-OFFS  (always start PER SHARE) ───────────
-long_stock = stock_prices.copy()  # Create explicit copy
-naked_short_call = np.where(
-    stock_prices <= strike_price,
-    premium,  # OTM → keep premium
-    premium - (stock_prices - strike_price),  # ITM → premium – intrinsic
-)
-covered_call = long_stock + naked_short_call
+# ─────────── 4. PAY-OFF CALCULATIONS (Per Share) ───────────
+# Dictionary to store strategy calculations
+strategies = {}
+if "Long Stock" in strategies_to_plot:
+    strategies["Long Stock"] = stock_prices.copy()  # Explicit copy
+if "Naked Short Call" in strategies_to_plot:
+    strategies["Naked Short Call"] = np.where(
+        stock_prices <= strike_price,
+        premium,  # OTM → keep premium
+        premium - (stock_prices - strike_price),  # ITM → premium – intrinsic
+    )
+if "Covered Call" in strategies_to_plot:
+    # Requires Long Stock and Naked Short Call
+    if "Long Stock" not in strategies:
+        strategies["Long Stock"] = stock_prices.copy()
+    if "Naked Short Call" not in strategies:
+        strategies["Naked Short Call"] = np.where(
+            stock_prices <= strike_price,
+            premium,
+            premium - (stock_prices - strike_price),
+        )
+    strategies["Covered Call"] = (
+        strategies["Long Stock"] + strategies["Naked Short Call"]
+    )
+if "Naked Short Put" in strategies_to_plot:
+    strategies["Naked Short Put"] = np.where(
+        stock_prices >= strike_price,
+        premium,  # OTM → keep premium
+        premium - (strike_price - stock_prices),  # ITM → premium – intrinsic
+    )
+if "Cash Secured Put" in strategies_to_plot:
+    strategies["Cash Secured Put"] = np.where(
+        stock_prices >= strike_price,
+        premium,  # OTM → keep premium
+        premium - (strike_price - stock_prices),  # ITM → premium – intrinsic
+    )
 
-naked_short_put = np.where(
-    stock_prices >= strike_price,
-    premium,  # OTM → keep premium
-    # ITM → premium - (strike - stock_price)
-    premium - (strike_price - stock_prices),
-)
-# ─────────── 4. CONVERT “VALUE” → “PROFIT” IF NEEDED ───────────
+print(f"\nStrategies: {strategies.keys()}\n")
+
+# ─────────── 5. CONVERT “VALUE” → “PROFIT” IF NEEDED ───────────
 if show_profit:
-    long_stock -= basis
-    covered_call -= basis  # covered-call owns the same shares
-    # naked_short_call and naked_short_put already show profit (premium received minus intrinsic loss)
-# ─────────── 5. SCALE UP TO CONTRACT IF NEEDED ───────────
-scale = 1 if per_share else contract_size
-long_stock *= scale
-naked_short_call *= scale
-naked_short_put *= scale
-covered_call *= scale
+    if "Long Stock" in strategies:
+        strategies["Long Stock"] -= basis
+    if "Covered Call" in strategies:
+        # Covered-call owns the same shares
+        strategies["Covered Call"] -= basis
+    # Naked Short Call and Naked Short Put already show profit
 
-# ─────────── 6. PLOT ───────────
+# ─────────── 6. SCALE UP TO CONTRACT IF NEEDED ───────────
+scale = 1 if per_share else contract_size
+for strategy in strategies:
+    strategies[strategy] *= scale
+
+# ─────────── 7. PLOT ───────────
 plt.rcParams["figure.figsize"] = (12, 8)
 plt.rcParams.update({"font.size": 16})
-plt.plot(stock_prices, long_stock, label="Long Stock", lw=3)
-plt.plot(stock_prices, naked_short_call, label="Naked Short Call", lw=3)
-plt.plot(stock_prices, covered_call, label="Covered Call", lw=3)
-plt.plot(stock_prices, naked_short_put, label="Naked Short Put", lw=3)
+
+# Plot only selected strategies
+for strategy, payoff in strategies.items():
+    plt.plot(stock_prices, payoff, label=strategy, lw=3)
 
 plt.axhline(0, color="gray", lw=1, ls="--")
 
 ylabel = "Profit / Loss" if show_profit else "Position Value"
 ylabel += " ($ per share)" if per_share else " ($ per 100-share contract)"
 plt.ylabel(ylabel)
-plt.xlabel("Stock Price at Expiration ($)")  # ← real prices, 315 – 525
-
+plt.xlabel("Stock Price at Expiration ($)")
 title_mode = "P/L" if show_profit else "Value"
 title_scale = "Per Share" if per_share else "Per Contract"
 plt.title(
