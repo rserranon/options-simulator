@@ -1,2 +1,4 @@
+panel
 numpy
-matplotlib
+pandas
+plotly
